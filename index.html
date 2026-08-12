@@ -503,13 +503,20 @@
     if(!loaded){
       loaded = true;
       if(/^\d+$/.test(String(CONFIG.vimeoId))){
-        // El iframe nace del tap del usuario: así iOS y Android permiten el audio.
-        // playsinline=0 en móvil es lo que hace que iOS abra su reproductor
-        // a pantalla completa; con playsinline=1 se queda incrustado en la página.
+        // En móvil NO se pide autoplay, a propósito.
+        // El toque en nuestro botón no cruza al iframe de Vimeo (los navegadores
+        // no propagan la activación del usuario a un iframe de otro origen), así
+        // que un autoplay ahí se bloquea y Vimeo arranca en mudo para poder
+        // arrancar. Además iOS solo manda el video a su reproductor nativo a
+        // pantalla completa cuando el play lo inicia el usuario sobre el elemento.
+        // Dejando que toque el play de Vimeo, ese toque sí cuenta: suena y abre
+        // en pantalla completa. Cuesta un toque más y es la única forma fiable.
+        // playsinline=0 es lo que habilita la pantalla completa nativa en iOS.
         var f = document.createElement("iframe");
         f.src = "https://player.vimeo.com/video/" + CONFIG.vimeoId +
-                "?autoplay=1&playsinline=" + (isTouch ? "0" : "1") +
-                "&title=0&byline=0&portrait=0&dnt=1";
+                "?title=0&byline=0&portrait=0&dnt=1" +
+                "&playsinline=" + (isTouch ? "0" : "1") +
+                (isTouch ? "" : "&autoplay=1");
         f.allow = "autoplay; fullscreen; picture-in-picture";
         if(!isTouch) f.setAttribute("playsinline","");
         f.setAttribute("title","Los Corales Bay Tower");
@@ -524,14 +531,18 @@
             if(d && d.duration && d.duration - d.seconds < 0.4) startHandoff();
           });
 
-          // Android no abre pantalla completa por su cuenta: hay que pedirla.
-          if(isTouch && !isIOS){
-            player.on("play", function(){
-              if(fsAsked) return;
+          player.on("play", function(){
+            // Si aun así arrancó en mudo, intentar devolver el sonido.
+            player.getMuted().then(function(m){
+              if(m) player.setMuted(false).catch(function(){});
+            }).catch(function(){});
+
+            // Android no abre pantalla completa por su cuenta: hay que pedirla.
+            if(isTouch && !isIOS && !fsAsked){
               fsAsked = true;
               player.requestFullscreen().catch(function(){});
-            });
-          }
+            }
+          });
         }
       }else{
         // Aún no se ha puesto el ID de Vimeo: se avisa con calma en vez de romper.
@@ -540,8 +551,9 @@
         p.textContent = "The welcome video will be available shortly.";
         frame.appendChild(p);
       }
-    }else if(player){
-      // Si vuelve a abrir, el video retoma donde iba.
+    }else if(player && !isTouch){
+      // Si vuelve a abrir, el video retoma donde iba. En móvil no: un play
+      // programático volvería a arrancar en mudo, mejor que lo toque él.
       fsAsked = false;
       player.play().catch(function(){});
     }
