@@ -15,7 +15,7 @@
 <script>
   const CONFIG = {
     // ID numérico de Vimeo. vimeo.com/912345678 → "912345678"
-    vimeoId: "1217503469",
+    vimeoId: "1217808417",
 
     // Brochure de entrega. Único punto del sistema donde vive este link.
     brochureUrl: "https://heyzine.com/flip-book/d32fcd519d.html",
@@ -127,10 +127,14 @@
   }
 
   /* firma del desarrollador — el PNG ya viene en blanco sobre transparente */
+  .devlink{display:inline-block;line-height:0;border-radius:4px}
+  .devlink:focus-visible{outline:2px solid var(--teal-lt);outline-offset:6px}
+  .devlink:hover .devmark{opacity:1}
   .devmark{
     height:clamp(26px,3.6vh,34px);width:auto;display:block;
     opacity:.88;
     filter:drop-shadow(0 2px 10px rgba(0,0,0,.55));
+    transition:opacity .3s var(--ease);
   }
 
   .hero{
@@ -376,7 +380,10 @@
 </div>
 
 <header class="top">
-  <img class="devmark" src="paez-development-blanco.png" alt="Paez Development" data-rise style="--d:.15s">
+  <a class="devlink" href="https://paezdevelopment.com/" target="_blank" rel="noopener"
+     data-rise style="--d:.15s">
+    <img class="devmark" src="paez-development-blanco.png" alt="Paez Development">
+  </a>
 </header>
 
 <main class="hero">
