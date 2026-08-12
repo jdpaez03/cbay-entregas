@@ -399,12 +399,12 @@
       </span>
       <span class="play-txt">
         <b>Watch welcome</b>
-        <small>4:22</small>
+        <small>4:32</small>
       </span>
     </button>
 
     <a class="cta" id="brochure" href="#">
-      <span>View finish options</span>
+      <span>View Brochure</span>
       <svg width="22" height="12" viewBox="0 0 22 12" fill="none" aria-hidden="true">
         <path d="M0 6h19M14 1l5 5-5 5" stroke="currentColor" stroke-width="1.4"/>
       </svg>
@@ -439,7 +439,7 @@
         </div>
       </div>
       <a class="cine-link" id="cineLink" href="#">
-        <span>View finishes</span>
+        <span>View Brochure</span>
         <svg width="18" height="10" viewBox="0 0 18 10" fill="none" aria-hidden="true">
           <path d="M0 5h15M11 1l4 4-4 4" stroke="currentColor" stroke-width="1.3"/>
         </svg>
@@ -470,6 +470,9 @@
     $("w").innerHTML = g;
   })();
 
+  // Que el número inicial no contradiga a CONFIG.redirectDelay.
+  $("count").textContent = Math.max(1, CONFIG.redirectDelay | 0);
+
   /* ── enlaces al brochure: un solo origen de verdad ── */
   ["brochure","cineLink"].forEach(function(id){
     var a = $(id);
@@ -485,21 +488,51 @@
       handoff = $("handoff"),
       fill    = $("fill"),
       timer   = null,
-      loaded  = false;
+      loaded  = false,
+      player  = null,
+      going   = false,
+      deadline = 0,
+      fsAsked = false;
+
+  // En móvil el video se ve mucho mejor en el reproductor nativo a pantalla completa.
+  var isTouch = matchMedia("(hover:none) and (pointer:coarse)").matches;
+  var isIOS   = /iP(hone|od|ad)/.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   function openCinema(){
     if(!loaded){
       loaded = true;
       if(/^\d+$/.test(String(CONFIG.vimeoId))){
         // El iframe nace del tap del usuario: así iOS y Android permiten el audio.
+        // playsinline=0 en móvil es lo que hace que iOS abra su reproductor
+        // a pantalla completa; con playsinline=1 se queda incrustado en la página.
         var f = document.createElement("iframe");
         f.src = "https://player.vimeo.com/video/" + CONFIG.vimeoId +
-                "?autoplay=1&playsinline=1&title=0&byline=0&portrait=0&dnt=1";
+                "?autoplay=1&playsinline=" + (isTouch ? "0" : "1") +
+                "&title=0&byline=0&portrait=0&dnt=1";
         f.allow = "autoplay; fullscreen; picture-in-picture";
-        f.setAttribute("playsinline","");
+        if(!isTouch) f.setAttribute("playsinline","");
         f.setAttribute("title","Los Corales Bay Tower");
         frame.appendChild(f);
-        if(window.Vimeo) new Vimeo.Player(f).on("ended", startHandoff);
+
+        if(window.Vimeo){
+          player = new Vimeo.Player(f);
+          player.on("ended", startHandoff);
+
+          // Respaldo: en iOS 'ended' a veces no llega. El propio tiempo lo dispara.
+          player.on("timeupdate", function(d){
+            if(d && d.duration && d.duration - d.seconds < 0.4) startHandoff();
+          });
+
+          // Android no abre pantalla completa por su cuenta: hay que pedirla.
+          if(isTouch && !isIOS){
+            player.on("play", function(){
+              if(fsAsked) return;
+              fsAsked = true;
+              player.requestFullscreen().catch(function(){});
+            });
+          }
+        }
       }else{
         // Aún no se ha puesto el ID de Vimeo: se avisa con calma en vez de romper.
         var p = document.createElement("p");
@@ -507,10 +540,10 @@
         p.textContent = "The welcome video will be available shortly.";
         frame.appendChild(p);
       }
-    }else{
+    }else if(player){
       // Si vuelve a abrir, el video retoma donde iba.
-      var prev = frame.querySelector("iframe");
-      if(prev) prev.contentWindow.postMessage('{"method":"play"}', "*");
+      fsAsked = false;
+      player.play().catch(function(){});
     }
     cinema.classList.add("on");
     cinema.setAttribute("aria-hidden","false");
@@ -523,29 +556,50 @@
     cinema.setAttribute("aria-hidden","true");
     document.body.style.overflow = "";
     stopHandoff();
-    var f = frame.querySelector("iframe");
-    if(f) f.contentWindow.postMessage('{"method":"pause"}', "*");
+    if(player) player.pause().catch(function(){});
     playBtn.focus();
   }
 
   function startHandoff(){
-    var left = CONFIG.redirectDelay;
-    $("count").textContent = left;
+    if(going) return;               // 'ended' y el respaldo pueden llegar los dos
+    going = true;
+
+    var secs = Math.max(1, CONFIG.redirectDelay | 0);
+    deadline = Date.now() + secs * 1000;
+
+    $("count").textContent = secs;
     handoff.classList.add("on");
-    fill.style.transition = "width " + left + "s linear";
+    fill.style.transition = "width " + secs + "s linear";
     requestAnimationFrame(function(){ fill.classList.add("run"); });
-    timer = setInterval(function(){
-      left--;
-      $("count").textContent = Math.max(left, 0);
-      if(left <= 0){
-        clearInterval(timer);
-        window.location.href = CONFIG.brochureUrl;
-      }
-    }, 1000);
+
+    // Si el video quedó en pantalla completa, salir: si no, la navegación
+    // se queda atrapada detrás del reproductor.
+    if(player) player.exitFullscreen().catch(function(){});
+
+    clearInterval(timer);
+    timer = setInterval(tick, 250);
+  }
+
+  // Se mide contra el reloj, no contando ticks del timer. Los móviles congelan
+  // los timers cuando el video toma la pantalla o la página pasa a segundo plano;
+  // midiendo tiempo real, al volver ya está vencido y redirige igual.
+  function tick(){
+    if(!going) return;
+    var left = Math.ceil((deadline - Date.now()) / 1000);
+    var c = $("count");
+    if(c) c.textContent = Math.max(left, 0);
+    if(Date.now() >= deadline){
+      clearInterval(timer);
+      timer = null;
+      going = false;
+      window.location.href = CONFIG.brochureUrl;
+    }
   }
 
   function stopHandoff(){
+    going = false;
     clearInterval(timer);
+    timer = null;
     handoff.classList.remove("on");
     fill.style.transition = "none";
     fill.classList.remove("run");
@@ -559,6 +613,19 @@
   cinema.addEventListener("click", function(e){ if(e.target === cinema) closeCinema(); });
   document.addEventListener("keydown", function(e){
     if(e.key === "Escape" && cinema.classList.contains("on")) closeCinema();
+  });
+
+  // Red de seguridad para móvil: al volver a la página (salir de pantalla completa,
+  // cambiar de app) se comprueba si la cuenta ya venció, o si el video terminó
+  // sin que llegara ningún evento.
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden) return;
+    if(going){ tick(); return; }
+    if(player && cinema.classList.contains("on")){
+      Promise.all([player.getCurrentTime(), player.getDuration()]).then(function(v){
+        if(v[1] && v[1] - v[0] < 1) startHandoff();
+      }).catch(function(){});
+    }
   });
 
   /* ── entrada ── */
