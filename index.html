@@ -15,7 +15,7 @@
 <script>
   const CONFIG = {
     // ID numérico de Vimeo. vimeo.com/912345678 → "912345678"
-    vimeoId: "1217816046",
+    vimeoId: "1219013913",
 
     // Brochure de entrega. Único punto del sistema donde vive este link.
     brochureUrl: "https://heyzine.com/flip-book/d32fcd519d.html",
@@ -611,8 +611,22 @@
       clearInterval(timer);
       timer = null;
       going = false;
-      window.location.href = CONFIG.brochureUrl;
+      abrirBrochure();
     }
+  }
+
+  // Se intenta pestaña nueva para que la landing siga viva detrás. Ojo: esto
+  // ocurre 4 s después del video, sin toque reciente, así que muchos
+  // navegadores lo bloquean como ventana emergente. Si lo bloquean, se navega
+  // en la misma pestaña, donde el botón Atrás devuelve a la landing.
+  // Nota: no se usa "noopener" como tercer argumento porque entonces window.open
+  // devuelve null siempre y no se podría distinguir el bloqueo. Se anula el
+  // opener a mano, que da la misma protección.
+  function abrirBrochure(){
+    var w = null;
+    try{ w = window.open(CONFIG.brochureUrl, "_blank"); }catch(e){}
+    if(w){ try{ w.opener = null; }catch(e){} }
+    else  { window.location.href = CONFIG.brochureUrl; }
   }
 
   function stopHandoff(){
